@@ -150,10 +150,10 @@ QA-материалы лежат в `qa/`:
 
 | Участник | Ответственность |
 |---|---|
-| User 1 | AI/CV: MoveNet, keypoints, posture metrics, scoring, smoothing |
-| User 2 | Frontend: камера, dashboard, графики, настройки, стили |
-| User 3 | Integration: App state, analysis loop, LocalStorage, export, build |
-| User 4 | Docs/QA: README, project brief, eval-plan, demo script, QA checklist |
+| Kirill | AI/CV: MoveNet, keypoints, posture metrics, scoring, smoothing |
+| Server | Frontend: камера, dashboard, графики, настройки, стили |
+| Lenara | Integration: App state, analysis loop, LocalStorage, export, build |
+| Emir | Docs/QA: README, project brief, eval-plan, demo script, QA checklist |
 
 ## Ограничения
 

@@ -46,6 +46,40 @@ Preview production-сборки:
 npm run preview
 ```
 
+## Загрузка модели MoveNet
+
+При `npm install` автоматически запускается `postinstall`-скрипт `scripts/download-movenet.mjs`. Он скачивает MoveNet Lightning в локальную папку `public/models/movenet-lightning/`, чтобы приложение могло запускать pose-estimation без ожидания загрузки модели из TFHub во время демонстрации.
+
+Если локальная модель отсутствует или скачать ее не получилось, приложение попробует загрузить MoveNet из TFHub при запуске.
+
+Если нужно пропустить скачивание модели при установке, например без интернета, в PowerShell выполните:
+
+```powershell
+$env:ERGOVISION_SKIP_MODEL_DOWNLOAD='1'
+npm install
+Remove-Item Env:\ERGOVISION_SKIP_MODEL_DOWNLOAD
+```
+
+В Git Bash, Linux или macOS:
+
+```bash
+ERGOVISION_SKIP_MODEL_DOWNLOAD=1 npm install
+```
+
+Скачать модель вручную после установки можно командой:
+
+```bash
+npm run download:movenet
+```
+
+Если сеть медленная, можно увеличить таймаут скачивания:
+
+```powershell
+$env:ERGOVISION_MODEL_DOWNLOAD_TIMEOUT_MS='120000'
+npm run download:movenet
+Remove-Item Env:\ERGOVISION_MODEL_DOWNLOAD_TIMEOUT_MS
+```
+
 ## Как пользоваться
 
 1. Откройте приложение и разрешите доступ к камере.

@@ -3,6 +3,8 @@ import type { KeypointName, PoseFrame, PoseKeypoint } from "../types/pose";
 type PoseDetector = import("@tensorflow-models/pose-detection").PoseDetector;
 export type PoseDetectorStatus = "idle" | "loading" | "ready" | "unavailable";
 
+const LOCAL_MOVENET_MODEL_URL = "/models/movenet-lightning/model.json";
+
 const KEYPOINT_MAP: Record<string, KeypointName | undefined> = {
   nose: "nose",
   left_eye: "left_eye",
@@ -27,10 +29,21 @@ async function loadDetector(): Promise<PoseDetector | null> {
         await tf.setBackend("webgl");
         await tf.ready();
 
-        const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        let detector: PoseDetector;
+        const detectorConfig = {
           modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
           enableSmoothing: true,
-        });
+        };
+
+        try {
+          detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+            ...detectorConfig,
+            modelUrl: LOCAL_MOVENET_MODEL_URL,
+          });
+        } catch (localModelError) {
+          console.warn("Local MoveNet model is unavailable, falling back to TFHub.", localModelError);
+          detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+        }
 
         detectorStatus = "ready";
         return detector;

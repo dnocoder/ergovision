@@ -1,6 +1,7 @@
 import type { KeypointName, PoseFrame, PoseKeypoint } from "../types/pose";
 
 type PoseDetector = import("@tensorflow-models/pose-detection").PoseDetector;
+export type PoseDetectorStatus = "idle" | "loading" | "ready" | "unavailable";
 
 const KEYPOINT_MAP: Record<string, KeypointName | undefined> = {
   nose: "nose",
@@ -13,9 +14,11 @@ const KEYPOINT_MAP: Record<string, KeypointName | undefined> = {
 };
 
 let detectorPromise: Promise<PoseDetector | null> | null = null;
+let detectorStatus: PoseDetectorStatus = "idle";
 
 async function loadDetector(): Promise<PoseDetector | null> {
   if (!detectorPromise) {
+    detectorStatus = "loading";
     detectorPromise = (async () => {
       try {
         await import("@tensorflow/tfjs-backend-webgl");
@@ -24,12 +27,16 @@ async function loadDetector(): Promise<PoseDetector | null> {
         await tf.setBackend("webgl");
         await tf.ready();
 
-        return poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
           modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
           enableSmoothing: true,
         });
+
+        detectorStatus = "ready";
+        return detector;
       } catch (error) {
         console.warn("MoveNet failed to load, demo mode is active.", error);
+        detectorStatus = "unavailable";
         return null;
       }
     })();
@@ -38,15 +45,41 @@ async function loadDetector(): Promise<PoseDetector | null> {
   return detectorPromise;
 }
 
-export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame> {
-  if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-    return createDemoPose(video);
+function hasLiveCamera(video: HTMLVideoElement): boolean {
+  const stream = video.srcObject;
+  return (
+    stream instanceof MediaStream &&
+    stream.getVideoTracks().some((track) => track.readyState === "live")
+  );
+}
+
+function canUseVideoFrame(video: HTMLVideoElement): boolean {
+  return (
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0
+  );
+}
+
+export function getPoseDetectorStatus(): PoseDetectorStatus {
+  return detectorStatus;
+}
+
+export function preloadPoseDetector(): Promise<PoseDetector | null> {
+  return loadDetector();
+}
+
+export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame | null> {
+  const liveCamera = hasLiveCamera(video);
+
+  if (!canUseVideoFrame(video)) {
+    return liveCamera ? null : createDemoPose(video);
   }
 
   const detector = await loadDetector();
 
   if (!detector) {
-    return createDemoPose(video);
+    return liveCamera ? null : createDemoPose(video);
   }
 
   const poses = await detector.estimatePoses(video, {
@@ -68,7 +101,7 @@ export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame> 
     .filter((point): point is PoseKeypoint => Boolean(point)) ?? [];
 
   if (keypoints.length < 3) {
-    return createDemoPose(video);
+    return liveCamera ? null : createDemoPose(video);
   }
 
   return {

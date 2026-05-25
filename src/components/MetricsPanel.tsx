@@ -3,7 +3,7 @@ import type { PostureResult } from "../types/pose";
 
 interface MetricsPanelProps {
   result: PostureResult;
-  modelSource: string;
+  modelSource: "movenet" | "demo" | "loading" | "unavailable";
 }
 
 const metricRows = [
@@ -14,6 +14,13 @@ const metricRows = [
   { key: "stability", label: "Нестабильность", icon: Activity },
 ] as const;
 
+function getModelSourceLabel(source: MetricsPanelProps["modelSource"]): string {
+  if (source === "movenet") return "MoveNet";
+  if (source === "loading") return "MoveNet loading";
+  if (source === "unavailable") return "MoveNet unavailable";
+  return "Demo fallback";
+}
+
 export function MetricsPanel({ result, modelSource }: MetricsPanelProps) {
   return (
     <section className="panel metrics-panel">
@@ -22,7 +29,7 @@ export function MetricsPanel({ result, modelSource }: MetricsPanelProps) {
           <p className="eyebrow">AI metrics</p>
           <h2>Признаки позы</h2>
         </div>
-        <span className="source-pill">{modelSource === "movenet" ? "MoveNet" : "Demo fallback"}</span>
+        <span className="source-pill">{getModelSourceLabel(modelSource)}</span>
       </div>
 
       <div className="metric-list">

@@ -1,7 +1,7 @@
 import { BrainCircuit, Download, PauseCircle, Settings, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calculateMetrics, createCalibration } from "./ai/postureMetrics";
-import { estimatePose } from "./ai/poseModel";
+import { estimatePose, getPoseDetectorStatus, preloadPoseDetector } from "./ai/poseModel";
 import { smoothPoseFrame, smoothPostureResult } from "./ai/poseSmoothing";
 import { scorePosture } from "./ai/riskScoring";
 import { BaselineTimer } from "./components/BaselineTimer";
@@ -53,11 +53,29 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>(() => loadSessions());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<AnalysisSettings>(defaultSettings);
+  const [detectorStatus, setDetectorStatus] = useState(getPoseDetectorStatus);
   const previousFrameRef = useRef<PoseFrame | null>(null);
   const previousResultRef = useRef<PostureResult | null>(null);
   const sessionStartedAt = useRef<Date>(new Date());
   const lastPointAt = useRef(0);
   const lastInferenceAt = useRef(0);
+
+  useEffect(() => {
+    if (!running) {
+      setDetectorStatus(getPoseDetectorStatus());
+      return;
+    }
+
+    let disposed = false;
+    setDetectorStatus(getPoseDetectorStatus());
+    preloadPoseDetector().finally(() => {
+      if (!disposed) setDetectorStatus(getPoseDetectorStatus());
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [running]);
 
   useEffect(() => {
     if (!running) return;
@@ -74,10 +92,17 @@ export function App() {
       lastInferenceAt.current = now;
 
       const rawFrame = video ? await estimatePose(video) : null;
+      setDetectorStatus(getPoseDetectorStatus());
       const nextFrame = rawFrame ? smoothPoseFrame(previousFrameRef.current, rawFrame, settings) : null;
-      if (disposed || !nextFrame) return;
+      if (disposed) return;
+      if (!nextFrame) {
+        animationFrame = window.requestAnimationFrame(tick);
+        return;
+      }
 
-      const metrics = calculateMetrics(nextFrame, calibration, previousFrameRef.current, settings.minKeypointScore);
+      const previousComparableFrame =
+        previousFrameRef.current?.source === nextFrame.source ? previousFrameRef.current : null;
+      const metrics = calculateMetrics(nextFrame, calibration, previousComparableFrame, settings.minKeypointScore);
       const scoredResult = scorePosture(metrics, settings.sensitivity);
       const nextResult = smoothPostureResult(previousResultRef.current, scoredResult, settings);
 
@@ -194,7 +219,13 @@ export function App() {
         <div className="side-stack">
           <RiskGauge score={result.riskScore} level={result.riskLevel} />
           <SettingsPanel open={settingsOpen} settings={settings} onChange={setSettings} />
-          <MetricsPanel result={result} modelSource={frame?.source ?? "demo"} />
+          <MetricsPanel
+            result={result}
+            modelSource={
+              frame?.source ??
+              (running ? (detectorStatus === "unavailable" ? "unavailable" : "loading") : "demo")
+            }
+          />
         </div>
       </section>
 

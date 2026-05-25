@@ -16,6 +16,7 @@ export function smoothPoseFrame(
   settings: AnalysisSettings,
 ): PoseFrame {
   if (!previousFrame || settings.keypointSmoothing <= 0) return nextFrame;
+  if (previousFrame.source !== nextFrame.source) return nextFrame;
 
   return {
     ...nextFrame,

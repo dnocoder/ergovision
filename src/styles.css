@@ -132,6 +132,7 @@ h2 {
 }
 
 .camera-stage canvas {
+  object-fit: cover;
   pointer-events: none;
   transform: scaleX(-1);
 }

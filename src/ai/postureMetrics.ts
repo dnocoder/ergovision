@@ -22,11 +22,36 @@ export function createCalibration(frame: PoseFrame, minScore = DEFAULT_REQUIRED_
   const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
 
   return {
+    source: frame.source,
+    createdAt: new Date().toISOString(),
     headOffset: nose.x - shoulderCenterX,
     shoulderSpan: distance(leftShoulder, rightShoulder),
     shoulderTilt: Math.abs(leftShoulder.y - rightShoulder.y),
     noseY: nose.y,
   };
+}
+
+export function averageCalibration(profiles: CalibrationProfile[]): CalibrationProfile | null {
+  if (profiles.length === 0) return null;
+  const mean = (pick: (profile: CalibrationProfile) => number) =>
+    profiles.reduce((sum, profile) => sum + pick(profile), 0) / profiles.length;
+
+  return {
+    source: profiles[profiles.length - 1].source,
+    createdAt: new Date().toISOString(),
+    headOffset: mean((profile) => profile.headOffset),
+    shoulderSpan: mean((profile) => profile.shoulderSpan),
+    shoulderTilt: mean((profile) => profile.shoulderTilt),
+    noseY: mean((profile) => profile.noseY),
+  };
+}
+
+export function hasRequiredKeypoints(frame: PoseFrame, minScore = DEFAULT_REQUIRED_VISIBILITY): boolean {
+  return Boolean(
+    byName(frame, "nose", minScore) &&
+      byName(frame, "left_shoulder", minScore) &&
+      byName(frame, "right_shoulder", minScore),
+  );
 }
 
 export function calculateMetrics(
@@ -58,8 +83,8 @@ export function calculateMetrics(
   const shoulderSpan = distance(leftShoulder, rightShoulder);
   const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
   const baselineSpan = calibration?.shoulderSpan || shoulderSpan;
-  const baselineOffset = calibration?.headOffset || 0;
-  const baselineNoseY = calibration?.noseY || nose.y;
+  const baselineOffset = calibration?.headOffset ?? 0;
+  const baselineNoseY = calibration?.noseY ?? nose.y;
 
   const eyeTilt = leftEye && rightEye ? Math.abs(leftEye.y - rightEye.y) : 0;
   const shoulderTilt = Math.max(0, Math.abs(leftShoulder.y - rightShoulder.y) - (calibration?.shoulderTilt ?? 0));

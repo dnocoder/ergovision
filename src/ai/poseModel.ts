@@ -3,7 +3,7 @@ import type { KeypointName, PoseFrame, PoseKeypoint } from "../types/pose";
 type PoseDetector = import("@tensorflow-models/pose-detection").PoseDetector;
 export type PoseDetectorStatus = "idle" | "loading" | "ready" | "unavailable";
 
-const LOCAL_MOVENET_MODEL_URL = "/models/movenet-lightning/model.json";
+const LOCAL_MOVENET_MODEL_URL = `${import.meta.env.BASE_URL}models/movenet-lightning/model.json`;
 
 const KEYPOINT_MAP: Record<string, KeypointName | undefined> = {
   nose: "nose",
@@ -26,7 +26,8 @@ async function loadDetector(): Promise<PoseDetector | null> {
         await import("@tensorflow/tfjs-backend-webgl");
         const tf = await import("@tensorflow/tfjs-core");
         const poseDetection = await import("@tensorflow-models/pose-detection");
-        await tf.setBackend("webgl");
+        const webglReady = await tf.setBackend("webgl");
+        if (!webglReady) throw new Error("WebGL backend is not supported in this browser.");
         await tf.ready();
 
         let detector: PoseDetector;
@@ -48,8 +49,10 @@ async function loadDetector(): Promise<PoseDetector | null> {
         detectorStatus = "ready";
         return detector;
       } catch (error) {
-        console.warn("MoveNet failed to load, demo mode is active.", error);
+        console.warn("MoveNet failed to load.", error);
         detectorStatus = "unavailable";
+        // Allow the next session start to retry instead of caching the failure forever.
+        detectorPromise = null;
         return null;
       }
     })();
@@ -82,17 +85,25 @@ export function preloadPoseDetector(): Promise<PoseDetector | null> {
   return loadDetector();
 }
 
-export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame | null> {
+/**
+ * Runs MoveNet on the current video frame. When `allowDemo` is set (the camera
+ * failed to start), a synthetic pose is returned instead so the dashboard can
+ * still be demonstrated without a webcam.
+ */
+export async function estimatePose(video: HTMLVideoElement, allowDemo = false): Promise<PoseFrame | null> {
   const liveCamera = hasLiveCamera(video);
+  const fallback = () => (allowDemo && !liveCamera ? createDemoPose(video) : null);
 
   if (!canUseVideoFrame(video)) {
-    return liveCamera ? null : createDemoPose(video);
+    return fallback();
   }
 
-  const detector = await loadDetector();
+  // After a failed load, retry only when a new session starts (preloadPoseDetector),
+  // not on every frame.
+  const detector = detectorStatus === "unavailable" ? null : await loadDetector();
 
   if (!detector) {
-    return liveCamera ? null : createDemoPose(video);
+    return fallback();
   }
 
   const poses = await detector.estimatePoses(video, {
@@ -114,7 +125,7 @@ export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame |
     .filter((point): point is PoseKeypoint => Boolean(point)) ?? [];
 
   if (keypoints.length < 3) {
-    return liveCamera ? null : createDemoPose(video);
+    return fallback();
   }
 
   return {
@@ -124,26 +135,37 @@ export async function estimatePose(video: HTMLVideoElement): Promise<PoseFrame |
   };
 }
 
+/**
+ * Synthetic pose for demo mode. It cycles through ~30 s: mostly an upright
+ * posture with light sway, then a slouch (head forward and tilted, shoulders
+ * uneven) so that risk changes and warnings can be demonstrated without a camera.
+ */
 export function createDemoPose(video?: HTMLVideoElement): PoseFrame {
   const width = video?.videoWidth || 960;
   const height = video?.videoHeight || 540;
   const t = performance.now() / 1000;
-  const sway = Math.sin(t * 1.25) * 18;
-  const shoulderShift = Math.sin(t * 0.75) * 11;
-  const forwardLean = Math.max(0, Math.sin(t * 0.45)) * 34;
+  const phase = (t % 30) / 30;
+  // 0 while upright, rises to 1 and holds there during the slouch window (40%–95% of the cycle).
+  const slouch = phase < 0.4 || phase > 0.95 ? 0 : Math.min(1, Math.sin(((phase - 0.4) / 0.55) * Math.PI) * 1.8);
 
-  const cx = width / 2 + sway;
-  const shoulderY = height * 0.63;
-  const span = width * 0.29 - forwardLean * 0.7;
+  const sway = Math.sin(t * 1.25) * 8;
+  const cx = width / 2 + sway + slouch * width * 0.05;
+  const shoulderY = height * 0.66;
+  const span = width * 0.3 * (1 + slouch * 0.35);
+  const shoulderShift = Math.sin(t * 0.75) * 3 + slouch * height * 0.09;
+  const headDrop = slouch * height * 0.14;
+  const headTilt = slouch * height * 0.08;
+  const headShift = slouch * width * 0.11;
+  const eyeY = height * 0.3 + headDrop;
 
   const points: PoseKeypoint[] = [
-    { name: "nose", x: cx + sway * 0.35, y: height * 0.31 + forwardLean, score: 0.96 },
-    { name: "left_eye", x: cx - 32, y: height * 0.28 + forwardLean * 0.4, score: 0.9 },
-    { name: "right_eye", x: cx + 32, y: height * 0.28 - forwardLean * 0.1, score: 0.9 },
-    { name: "left_ear", x: cx - 66, y: height * 0.32, score: 0.84 },
-    { name: "right_ear", x: cx + 66, y: height * 0.32, score: 0.84 },
-    { name: "left_shoulder", x: cx - span / 2, y: shoulderY - shoulderShift, score: 0.92 },
-    { name: "right_shoulder", x: cx + span / 2, y: shoulderY + shoulderShift, score: 0.92 },
+    { name: "nose", x: cx + headShift, y: height * 0.34 + headDrop, score: 0.96 },
+    { name: "left_eye", x: cx + headShift - 30, y: eyeY - headTilt, score: 0.92 },
+    { name: "right_eye", x: cx + headShift + 30, y: eyeY + headTilt, score: 0.92 },
+    { name: "left_ear", x: cx + headShift - 64, y: eyeY + 14 - headTilt * 1.6, score: 0.84 },
+    { name: "right_ear", x: cx + headShift + 64, y: eyeY + 14 + headTilt * 1.6, score: 0.84 },
+    { name: "left_shoulder", x: cx - span / 2, y: shoulderY - shoulderShift, score: 0.93 },
+    { name: "right_shoulder", x: cx + span / 2, y: shoulderY + shoulderShift, score: 0.93 },
   ];
 
   return {

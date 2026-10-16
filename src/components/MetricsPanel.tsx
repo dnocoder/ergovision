@@ -3,59 +3,64 @@ import type { PostureResult } from "../types/pose";
 
 interface MetricsPanelProps {
   result: PostureResult;
-  modelSource: "movenet" | "demo" | "loading" | "unavailable";
+  active: boolean;
 }
 
 const metricRows = [
   { key: "headTilt", label: "Наклон головы", icon: ScanFace },
   { key: "shoulderTilt", label: "Перекос плеч", icon: Ruler },
   { key: "headOffset", label: "Смещение головы", icon: MoveHorizontal },
-  { key: "distanceRisk", label: "Близость к камере", icon: ShieldAlert },
-  { key: "stability", label: "Нестабильность", icon: Activity },
+  { key: "distanceRisk", label: "Близость к экрану", icon: ShieldAlert },
+  { key: "stability", label: "Подвижность", icon: Activity },
 ] as const;
 
-function getModelSourceLabel(source: MetricsPanelProps["modelSource"]): string {
-  if (source === "movenet") return "MoveNet";
-  if (source === "loading") return "MoveNet loading";
-  if (source === "unavailable") return "MoveNet unavailable";
-  return "Demo fallback";
+function barTone(value: number): string {
+  if (value > 60) return "high";
+  if (value > 30) return "medium";
+  return "low";
 }
 
-export function MetricsPanel({ result, modelSource }: MetricsPanelProps) {
+export function MetricsPanel({ result, active }: MetricsPanelProps) {
   return (
     <section className="panel metrics-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">AI metrics</p>
-          <h2>Признаки позы</h2>
+          <p className="eyebrow">Признаки позы</p>
+          <h2>Детализация</h2>
         </div>
-        <span className="source-pill">{getModelSourceLabel(modelSource)}</span>
+        <span className="source-pill" title="Доля надежно распознанных ключевых точек">
+          <UserRoundCheck size={16} aria-hidden="true" />
+          {active ? `${Math.round(result.metrics.visibility)}%` : "—"}
+        </span>
       </div>
 
       <div className="metric-list">
-        {metricRows.map(({ key, label, icon: Icon }) => (
-          <div className="metric-row" key={key}>
-            <div className="metric-label">
-              <Icon size={18} aria-hidden="true" />
-              <span>{label}</span>
+        {metricRows.map(({ key, label, icon: Icon }) => {
+          const value = active ? Math.round(result.metrics[key]) : 0;
+          return (
+            <div className="metric-row" key={key}>
+              <div className="metric-label">
+                <Icon size={18} aria-hidden="true" />
+                <span>{label}</span>
+              </div>
+              <div className="metric-bar" aria-hidden="true">
+                <span className={`tone-${barTone(value)}`} style={{ width: `${value}%` }} />
+              </div>
+              <strong>{active ? value : "—"}</strong>
             </div>
-            <div className="metric-bar" aria-hidden="true">
-              <span style={{ width: `${Math.round(result.metrics[key])}%` }} />
-            </div>
-            <strong>{Math.round(result.metrics[key])}</strong>
-          </div>
-        ))}
-      </div>
-
-      <div className="visibility-box">
-        <UserRoundCheck size={20} aria-hidden="true" />
-        <span>Видимость keypoints</span>
-        <strong>{result.metrics.visibility}%</strong>
+          );
+        })}
       </div>
 
       <div className="reason-box">
-        <span>Причины</span>
-        <p>{result.reasons.length > 0 ? result.reasons.join(", ") : "критичных отклонений нет"}</p>
+        <span>Отклонения</span>
+        <p>
+          {!active
+            ? "Появятся во время анализа."
+            : result.reasons.length > 0
+              ? result.reasons.map((reason) => reason[0].toUpperCase() + reason.slice(1)).join(" · ")
+              : "Критичных отклонений нет"}
+        </p>
       </div>
     </section>
   );

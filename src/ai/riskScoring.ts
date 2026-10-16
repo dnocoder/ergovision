@@ -4,6 +4,29 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+export const REASONS = {
+  headTilt: "наклон головы",
+  shoulderTilt: "перекос плеч",
+  headOffset: "голова смещена от центра плеч",
+  distance: "слишком близко к экрану",
+  visibility: "не все ключевые точки видны",
+} as const;
+
+const TIPS: Record<string, string> = {
+  [REASONS.distance]: "Отодвиньтесь от экрана и выпрямите спину — монитор должен быть на расстоянии вытянутой руки.",
+  [REASONS.headTilt]: "Держите голову ровно, взгляд — на верхнюю треть экрана.",
+  [REASONS.shoulderTilt]: "Выровняйте плечи и опустите их, локти — на подлокотники или стол.",
+  [REASONS.headOffset]: "Сядьте по центру перед монитором, не тянитесь головой в сторону.",
+  [REASONS.visibility]: "Сядьте так, чтобы голова и плечи полностью попадали в кадр, и проверьте освещение.",
+};
+
+export function getPostureTip(reasons: string[]): string {
+  for (const reason of reasons) {
+    if (TIPS[reason]) return TIPS[reason];
+  }
+  return "Отличная посадка. Не забывайте каждые 30–40 минут вставать и разминаться.";
+}
+
 export function getRiskLevel(riskScore: number): RiskLevel {
   if (riskScore >= 61) return "high";
   if (riskScore >= 31) return "medium";
@@ -22,11 +45,11 @@ export function scorePosture(metrics: PostureMetrics, sensitivity = 1): PostureR
   const riskScore = clampScore(weighted * sensitivity + visibilityPenalty);
   const reasons: string[] = [];
 
-  if (metrics.headTilt > 34) reasons.push("наклон головы");
-  if (metrics.shoulderTilt > 30) reasons.push("перекос плеч");
-  if (metrics.headOffset > 34) reasons.push("голова смещена от центра плеч");
-  if (metrics.distanceRisk > 35) reasons.push("слишком близко к камере");
-  if (metrics.visibility < 75) reasons.push("не все ключевые точки видны");
+  if (metrics.headTilt > 34) reasons.push(REASONS.headTilt);
+  if (metrics.shoulderTilt > 30) reasons.push(REASONS.shoulderTilt);
+  if (metrics.headOffset > 34) reasons.push(REASONS.headOffset);
+  if (metrics.distanceRisk > 35) reasons.push(REASONS.distance);
+  if (metrics.visibility < 75) reasons.push(REASONS.visibility);
 
   return {
     metrics,

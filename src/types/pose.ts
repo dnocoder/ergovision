@@ -22,7 +22,11 @@ export interface PoseFrame {
   timestamp: number;
 }
 
+export type PoseSource = PoseFrame["source"];
+
 export interface CalibrationProfile {
+  source: PoseSource;
+  createdAt: string;
   headOffset: number;
   shoulderSpan: number;
   shoulderTilt: number;
@@ -51,6 +55,9 @@ export interface AnalysisSettings {
   metricSmoothing: number;
   minKeypointScore: number;
   targetFps: number;
+  alertDelaySec: number;
+  soundAlerts: boolean;
+  desktopNotifications: boolean;
 }
 
 export interface SessionPoint {
@@ -67,4 +74,15 @@ export interface SessionSummary {
   maxRisk: number;
   highRiskFrames: number;
   totalFrames: number;
+  lowRiskFrames?: number;
+  alerts?: number;
+}
+
+export interface SessionStats {
+  samples: number;
+  riskSum: number;
+  maxRisk: number;
+  highSamples: number;
+  lowSamples: number;
+  alerts: number;
 }
